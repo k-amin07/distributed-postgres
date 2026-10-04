@@ -15,7 +15,7 @@ CREATE TYPE transaction_type AS ENUM (
 -- 1. USERS TABLE
 -- Target Shard Key: user_id (Self/Primary Key)
 CREATE TABLE IF NOT EXISTS users (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id          UUID PRIMARY KEY DEFAULT uuidv7(),
     username    VARCHAR(255) NOT NULL UNIQUE,
     password    VARCHAR(255) NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- 2. FOREX RATES TABLE (Global Reference Table)
 -- Strategy: Replicated in FULL across ALL shards so local joins can resolve FX.
 CREATE TABLE IF NOT EXISTS forex_rates (
-    id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id             UUID PRIMARY KEY DEFAULT uuidv7(),
     base_currency  VARCHAR(10) NOT NULL,
     quote_currency VARCHAR(10) NOT NULL,
     exchange_rate  NUMERIC(18, 6) NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS forex_rates (
 -- 3. ACCOUNTS TABLE
 -- Target Shard Key: user_id
 CREATE TABLE IF NOT EXISTS accounts (
-    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id               UUID PRIMARY KEY DEFAULT uuidv7(),
     user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name             VARCHAR(255) NOT NULL,
     type             VARCHAR(50) NOT NULL,
@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
 -- Target Shard Key: user_id
 
 CREATE TABLE IF NOT EXISTS categories (
-    id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id         UUID PRIMARY KEY DEFAULT uuidv7(),
     user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name       VARCHAR(255) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -70,7 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_categories_user_id ON categories(user_id);
 -- Target Shard Key: user_id
 
 CREATE TABLE IF NOT EXISTS transactions (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT uuidv7(),
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     to_account_id   UUID REFERENCES accounts(id) ON DELETE SET NULL,
     from_account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
@@ -92,7 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 -- Co-located with parent transaction and user on the same shard.
 
 CREATE TABLE IF NOT EXISTS transaction_line_items (
-    id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id             UUID PRIMARY KEY DEFAULT uuidv7(),
     user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     category_id    UUID REFERENCES categories(id) ON DELETE SET NULL,
