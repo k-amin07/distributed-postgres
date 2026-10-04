@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  # we are creating three postgres servers/shards. A lightweight go utility
+  # that uses consistent hashing will determine which data resides where.
+  # using postgres:16-alpine because it is lightweight.
+  # Mapping host port 5431, 5432, and 5433 to each shard respectively.
+  # # This allows for services hosted outside of docker to connect to
+  # # localhost:5431, localhost:5432, and localhost:5433.
+  # # Services hosted inside of docker can simply connect to
+  # # pg-shard-0:5432, pg-shard-1:5432, and pg-shard-2:5432.
+  # Volumes:
+  # # init-scripts would be folder in this repo, on the same level as the docker compose file
+  # # Binds it to docker-entry-point-initdb.d as read only in the container,
+  # # which is a special, built-in directory monitored by the official PostgreSQL Docker image.
+  # # shard0_data is the host side named docker storage location. On the container side,
+  # # it maps to the postgres data directory
+  # Command:
+  # # wal_level defines the write ahead log level.
+  # # # minimal=Only logs information needed to recover from a crash or immediate failure. (Not usable for replication).
+  # # # replica(Default)=Adds enough logging to support physical standby replicas and point-in-time recovery (PITR).
+  # # # logical= Adds information necessary to convert binary WAL changes into logical SQL-like transactions (e.g., "Insert row X into table Y")
+  # # max_wal_senders: When a replica or a CDC tool connects, PostgreSQL spawns a background worker called a WAL Sender to stream data to it.
+  # # # Every active replication connection consumes one slot from this pool.  These workers count against your global max_connections limit.
+  # # max_replication_slots: A replication slot is a mechanism on the primary database that tracks exactly how much data a specific replica has consumed.
+  # # # PostgreSQL guarantees it will never delete WAL files until the replication slot marks them as received.
+  # # # This prevents a lagging replica from breaking, but if a replica goes offline, the slot will hold onto WAL data indefinitely, potentially filling up your primary server's disk.
+  # # # You need at least one replication slot per independent subscriber or CDC task.
+  #
+  pg-shard-0:
+    image: postgres:16-alpine
+    container_name: pg-shard-0
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin_123
+      POSTGRES_DB: expenses
+    ports:
+      - "5431:5432"
+    volumes:
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+      - shard0_data:/var/lib/postgresql/data
+    command: postgres -c wal_level=replica -c max_wal_senders=10 -c max_replication_slots=10
+    # WAL: When we eventually add a replica container to docker-compose.yml, it will boot up, run pg_basebackup against pg-shard-0:5432, and stream WAL updates asynchronously.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d expenses"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - db-net
+
+  pg-shard-1: # this is the docker service name. A service running in docker can connect to postgres://admin:admin_123@pg-shard-0:5432/expenses
+    image: postgres:16-alpine
+    container_name: pg-shard-1 # the name that will show up in docker ps, docker logs, docker exec etc. For example docker exec -it pg-shard-0 psql -U admin -d expenses
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin_123
+      POSTGRES_DB: expenses
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+      - shard1_data:/var/lib/postgresql/data
+    command: postgres -c wal_level=replica -c max_wal_senders=10 -c max_replication_slots=10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d expenses"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - db-net
+
+  pg-shard-2:
+      image: postgres:16-alpine
+      container_name: pg-shard-2
+      environment:
+        POSTGRES_USER: admin
+        POSTGRES_PASSWORD: admin_123
+        POSTGRES_DB: expenses
+      ports:
+        - "5433:5432"
+      volumes:
+        - ./init-scripts:/docker-entrypoint-initdb.d:ro
+        - shard2_data:/var/lib/postgresql/data
+      command: postgres -c wal_level=replica -c max_wal_senders=10 -c max_replication_slots=10
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U admin -d expenses"]
+        interval: 5s
+        timeout: 5s
+        retries: 5
+      networks:
+        - db-net
+# Docker Compose requires you to declare all named volumes at the top/root level before services can use them.
+volumes:
+  shard0_data:
+  shard1_data:
+  shard2_data:
+
+networks:
+  # defining a bridge network to allow all these shards to communicate with each other
+  db-net:
+    driver: bridge
+    # internal: true # blocks host access, so a server code running on host machine wont be able to communicate
