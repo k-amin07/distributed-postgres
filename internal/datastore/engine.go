@@ -100,3 +100,39 @@ func ScatterGather[T any](ctx context.Context, engine *DistributedEngine, worker
 	}
 	return results, nil
 }
+
+// BroadcastExec executes a write/update query across ALL shards simultaneously.
+// Returns a slice of ShardResult containing affected row counts for each shard.
+func (e *DistributedEngine) BroadcastExec(ctx context.Context, sql string, args ...any) ([]ShardResult[int64], error) {
+	pools := e.manager.GetAllPools()
+	results := make([]ShardResult[int64], len(pools))
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	idx := 0
+	for name, pool := range pools {
+		shardName := name
+		shardPool := pool
+		i := idx
+
+		g.Go(func() error {
+			cmdTag, err := shardPool.Exec(ctx, sql, args...)
+			results[i] = ShardResult[int64]{
+				ShardName: shardName,
+				Data:      cmdTag.RowsAffected(),
+				Error:     err,
+			}
+			if err != nil {
+				return fmt.Errorf("broadcast write failed on shard %s: %w", shardName, err)
+			}
+			return nil
+		})
+		idx++
+	}
+
+	if err := g.Wait(); err != nil {
+		return results, fmt.Errorf("broadcast operation failed across cluster: %w", err)
+	}
+
+	return results, nil
+}

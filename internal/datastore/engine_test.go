@@ -92,3 +92,64 @@ func TestDistributedEngine(t *testing.T) {
 	}
 	t.Logf("Scatter-Gather Total Users across all shards = %d", totalUsers)
 }
+
+func TestBroadcastTables(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 1. Setup Engine
+	ring := sharding.NewHashRing(150)
+	manager := sharding.NewShardManager(ring)
+	defer manager.Close()
+
+	shardConfigs := []sharding.ShardConfig{
+		{Name: "pg-shard-0", DSN: "postgres://admin:admin_123@localhost:5431/expenses?sslmode=disable"},
+		{Name: "pg-shard-1", DSN: "postgres://admin:admin_123@localhost:5434/expenses?sslmode=disable"},
+		{Name: "pg-shard-2", DSN: "postgres://admin:admin_123@localhost:5433/expenses?sslmode=disable"},
+	}
+
+	for _, cfg := range shardConfigs {
+		if err := manager.RegisterAndConnect(ctx, cfg.Name, cfg.DSN); err != nil {
+			t.Fatalf("Failed registering shard %s: %v", cfg.Name, err)
+		}
+	}
+
+	engine := NewDistributedEngine(manager)
+
+	// 2. Broadcast Write: Insert new Forex Rate (USD -> PKR) across ALL shards
+	forexID, _ := uuid.NewV7()
+	insertForexSQL := `
+		INSERT INTO forex_rates (id, base_currency, quote_currency, exchange_rate)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (base_currency, quote_currency)
+		DO UPDATE SET exchange_rate = EXCLUDED.exchange_rate;
+	`
+
+	results, err := engine.BroadcastExec(ctx, insertForexSQL, forexID, "USD", "PKR", 278.50)
+	if err != nil {
+		t.Fatalf("BroadcastExec failed: %v", err)
+	}
+
+	for _, res := range results {
+		if res.Error != nil {
+			t.Errorf("Shard %s failed broadcast write: %v", res.ShardName, res.Error)
+		}
+		t.Logf("Broadcast write succeeded on %s -> Rows Affected: %d", res.ShardName, res.Data)
+	}
+
+	// 3. Verification: Query each shard independently to confirm local data presence
+	selectForexSQL := `SELECT exchange_rate FROM forex_rates WHERE base_currency = $1 AND quote_currency = $2`
+
+	for shardName, pool := range manager.GetAllPools() {
+		var rate float64
+		err := pool.QueryRow(ctx, selectForexSQL, "USD", "PKR").Scan(&rate)
+		if err != nil {
+			t.Fatalf("Failed reading local forex_rate on shard %s: %v", shardName, err)
+		}
+
+		if rate != 278.50 {
+			t.Errorf("Shard %s returned rate %f, expected 278.50", shardName, rate)
+		}
+		t.Logf("Verified local FX read on %s -> USD/PKR = %.2f", shardName, rate)
+	}
+}
