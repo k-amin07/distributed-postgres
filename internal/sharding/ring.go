@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"sync"
-
-	"github.com/google/uuid"
 )
 
 type HashRing struct {
@@ -57,7 +55,7 @@ func (h *HashRing) AddShard(shard string) {
 	})
 }
 
-func (h *HashRing) GetShard(userId uuid.UUID) (string, error) {
+func (h *HashRing) GetShard(shardKey string) (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -65,7 +63,7 @@ func (h *HashRing) GetShard(userId uuid.UUID) (string, error) {
 		return "", ErrNoShardsAvailable
 	}
 
-	userHash := h.hash(userId.String())
+	userHash := h.hash(shardKey)
 
 	idx := (sort.Search(len(h.ring), func(i int) bool {
 		return h.ring[i] >= userHash

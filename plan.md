@@ -1,4 +1,6 @@
-Your expense tracker domain model is an ideal candidate for horizontal sharding. It contains a strong Tenant Root Entity (user_id), a Global Reference Entity (ForexRate), and Co-located Hierarchies (Accounts, Transactions, TransactionLineItems, Categories).
+Your expense tracker domain model is an ideal candidate for horizontal sharding. It contains a strong Tenant Root Entity (user_id**), a Global Reference Entity (ForexRate), and Co-located Hierarchies (Accounts, Transactions, TransactionLineItems, Categories).
+
+_**user_id has been renamed to shardkey to keep the code in this repo generic, without binding it to a single schema_
 
 Below is a step-by-step tutorial roadmap to set up a Dockerized, multi-shard PostgreSQL simulation with a Go routing proxy using your exact schema.
 

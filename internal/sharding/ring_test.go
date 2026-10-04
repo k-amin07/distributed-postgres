@@ -21,7 +21,7 @@ func TestHashRingDistribution(t *testing.T) {
 
 	for i := 0; i < totalKeys; i++ {
 		userId, _ := uuid.NewV7()
-		targetShard, err := ring.GetShard(userId)
+		targetShard, err := ring.GetShard(userId.String())
 		if err != nil {
 			t.Fatalf("unexpected errror: %v", err)
 		}

@@ -19,7 +19,7 @@ func TestShardManagerIntegration(t *testing.T) {
 	// DSNs connecting to your local Docker Postgres shards on mapped host ports
 	shardConfigs := []ShardConfig{
 		{Name: "pg-shard-0", DSN: "postgres://admin:admin_123@localhost:5431/expenses?sslmode=disable"},
-		{Name: "pg-shard-1", DSN: "postgres://admin:admin_123@localhost:5432/expenses?sslmode=disable"},
+		{Name: "pg-shard-1", DSN: "postgres://admin:admin_123@localhost:5434/expenses?sslmode=disable"},
 		{Name: "pg-shard-2", DSN: "postgres://admin:admin_123@localhost:5433/expenses?sslmode=disable"},
 	}
 
@@ -34,7 +34,7 @@ func TestShardManagerIntegration(t *testing.T) {
 	userID, _ := uuid.NewV7()
 	username := "test_user_" + userID.String()[:8]
 
-	pool, targetShard, err := manager.GetPoolForUser(userID)
+	pool, targetShard, err := manager.GetPoolForShardKey(userID.String())
 	if err != nil {
 		t.Fatalf("Failed to resolve pool for user: %v", err)
 	}

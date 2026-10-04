@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -79,10 +78,10 @@ func (m *ShardManager) GetPool(shardName string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func (m *ShardManager) GetPoolForUser(userID uuid.UUID) (*pgxpool.Pool, string, error) {
-	shardName, err := m.ring.GetShard(userID)
+func (m *ShardManager) GetPoolForShardKey(shardKey string) (*pgxpool.Pool, string, error) {
+	shardName, err := m.ring.GetShard(shardKey)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to route user %s: %w", userID, err)
+		return nil, "", fmt.Errorf("failed to route user %s: %w", shardKey, err)
 	}
 
 	pool, err := m.GetPool(shardName)
